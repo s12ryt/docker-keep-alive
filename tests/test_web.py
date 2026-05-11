@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import app, mask_url_for_display, state
 from app.telegram_bot import COMMAND_LIST_TEXT, bot_menu_commands, hyphen_command_handlers
 
 
@@ -16,6 +16,37 @@ def test_index_page() -> None:
         response = client.get("/")
     assert response.status_code == 200
     assert "docker-keep-alive" in response.text
+
+
+def test_index_page_masks_urls_and_hides_keepalive_endpoint() -> None:
+    original_snapshot = state.snapshot()
+    secret_url = "https://secret.example.com/private/path?token=super-secret-token"
+    try:
+        state.restore({"urls": [], "notify_enabled": False, "backup_url": original_snapshot.get("backup_url")})
+        state.add_url(secret_url)
+
+        with TestClient(app) as client:
+            response = client.get("/")
+
+        assert response.status_code == 200
+        assert secret_url not in response.text
+        assert "super-secret-token" not in response.text
+        assert "/private/path" not in response.text
+        assert "第三方保活端點" not in response.text
+        assert "/s12ryt" not in response.text
+    finally:
+        state.restore(original_snapshot)
+
+
+def test_mask_url_for_display_keeps_safe_context_only() -> None:
+    masked = mask_url_for_display("https://secret.example.com/private/path?token=abc")
+
+    assert masked.startswith("https://")
+    assert "sec" in masked
+    assert "com" in masked
+    assert "private" not in masked
+    assert "token" not in masked
+    assert "••••" in masked
 
 
 def test_healthz_endpoint() -> None:

@@ -21,10 +21,12 @@
 | `KEEPALIVE_INTERVAL_SECONDS` | 否 | 保活間隔，預設 `300` |
 | `BACKUP_INTERVAL_SECONDS` | 否 | 備份間隔，預設 `600` |
 | `TELEGRAM_CONFLICT_RETRY_SECONDS` | 否 | Telegram polling 衝突後重試間隔，預設 `60` |
+| `TZ` | 否 | 顯示時間的時區 offset，例如 `+0800`、`-0530`，預設 UTC |
 
 也支援大寫別名：`BOT_ID`、`CHAT_ID`、`BACKUP`。
 
 設定 `backup` 後，服務啟動或重啟時會自動讀取資料庫內最新備份並恢復狀態；定期備份每次完成後只保留最新備份，以避免資料庫長期累積過多資料。
+`TZ` 使用 `+HHMM` 或 `-HHMM` 格式控制狀態頁、保活檢查與備份列表的顯示時間，例如台灣時間可設定 `TZ=+0800`。
 
 ## Telegram 指令
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Column, DateTime, Integer, MetaData, Table, Text, create_engine, delete, insert, select
 from sqlalchemy.engine import Engine
+
+from .timezone import configured_timezone, format_datetime
 
 
 metadata = MetaData()
@@ -39,7 +41,7 @@ class BackupStore:
         metadata.create_all(self.engine)
 
     def create_backup(self, payload: dict[str, Any], keep_only_latest: bool = False) -> int:
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(configured_timezone())
         with self.engine.begin() as conn:
             result = conn.execute(insert(backups).values(created_at=created_at, payload=json.dumps(payload, ensure_ascii=False)))
             backup_id = int(result.inserted_primary_key[0])
@@ -50,7 +52,7 @@ class BackupStore:
     def list_backups(self, limit: int = 20) -> list[dict[str, Any]]:
         stmt = select(backups.c.id, backups.c.created_at).order_by(backups.c.created_at.desc()).limit(limit)
         with self.engine.begin() as conn:
-            return [{"id": row.id, "created_at": row.created_at.isoformat()} for row in conn.execute(stmt)]
+            return [{"id": row.id, "created_at": format_datetime(row.created_at)} for row in conn.execute(stmt)]
 
     def get_backup(self, backup_id: int) -> dict[str, Any] | None:
         stmt = select(backups.c.payload).where(backups.c.id == backup_id)
