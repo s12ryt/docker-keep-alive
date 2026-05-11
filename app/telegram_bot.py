@@ -97,14 +97,15 @@ class BotController:
     async def notify(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(update, self.allowed_chat_id):
             return
-        self.state.notify_enabled = not self.state.notify_enabled
-        await _reply(update, f"即時通知已{'開啟' if self.state.notify_enabled else '關閉'}。")
+        enabled = self.state.toggle_notify()
+        await _reply(update, f"即時通知已{'開啟' if enabled else '關閉'}。")
 
     async def backup(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(update, self.allowed_chat_id):
             return
-        if self.state.backup_url:
-            await self._create_backup(update, self.state.backup_url)
+        backup_url = self.state.get_backup_url()
+        if backup_url:
+            await self._create_backup(update, backup_url)
             return
         self.pending[update.effective_chat.id] = {"action": "backup-url"}
         await _reply(update, "我已收到請求! 請在下則訊息中給出完整的MySQL/postgres網址:")
@@ -112,8 +113,9 @@ class BotController:
     async def rebackup(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(update, self.allowed_chat_id):
             return
-        if self.state.backup_url:
-            await self._show_backups_for_restore(update, self.state.backup_url)
+        backup_url = self.state.get_backup_url()
+        if backup_url:
+            await self._show_backups_for_restore(update, backup_url)
             return
         self.pending[update.effective_chat.id] = {"action": "rebackup-url"}
         await _reply(update, "我已收到請求! 請在下則訊息中給出完整的MySQL/postgres網址:")
@@ -157,7 +159,6 @@ class BotController:
 
     async def _create_backup(self, update: Update, database_url: str) -> None:
         try:
-            self.state.backup_url = database_url
             backup_id = BackupStore(database_url).create_backup(self.state.snapshot())
             await _reply(update, f"備份完成，備份編號：{backup_id}")
         except Exception as exc:  # noqa: BLE001
@@ -165,7 +166,6 @@ class BotController:
 
     async def _show_backups_for_restore(self, update: Update, database_url: str) -> None:
         try:
-            self.state.backup_url = database_url
             items = BackupStore(database_url).list_backups()
         except Exception as exc:  # noqa: BLE001
             await _reply(update, f"讀取備份失敗：{exc}")
@@ -186,7 +186,8 @@ class BotController:
             await _reply(update, "找不到這個備份編號。")
             return
         backup_id = int(backups[int(text) - 1]["id"])
-        payload = BackupStore(self.state.backup_url).get_backup(backup_id) if self.state.backup_url else None
+        database_url = self.state.get_backup_url()
+        payload = BackupStore(database_url).get_backup(backup_id) if database_url else None
         if not payload:
             await _reply(update, "找不到這個備份。")
             return

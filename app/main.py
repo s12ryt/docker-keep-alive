@@ -18,14 +18,14 @@ from .telegram_bot import run_bot
 
 settings = Settings.from_env()
 state = AppState(backup_url=settings.backup_url)
-background_tasks: list[asyncio.Task] = []
 
 
 def restore_latest_backup() -> None:
-    if not state.backup_url:
+    backup_url = state.get_backup_url()
+    if not backup_url:
         return
     try:
-        latest = BackupStore(state.backup_url).get_latest_backup()
+        latest = BackupStore(backup_url).get_latest_backup()
     except Exception:
         # 資料庫短暫不可用時仍應啟動 web 與 Telegram 控制面板。
         return
@@ -41,19 +41,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     restore_latest_backup()
 
     notify = noop_notify
+    tasks: list[asyncio.Task] = []
     if settings.bot_token and settings.chat_id and not os.getenv("DISABLE_TELEGRAM"):
         notify = await run_bot(state, settings.bot_token, settings.chat_id)
-    background_tasks.append(asyncio.create_task(keepalive_loop(state, settings.keepalive_interval_seconds, notify)))
-    background_tasks.append(asyncio.create_task(backup_loop(state, settings.backup_interval_seconds)))
+    tasks.append(asyncio.create_task(keepalive_loop(state, settings.keepalive_interval_seconds, notify)))
+    tasks.append(asyncio.create_task(backup_loop(state, settings.backup_interval_seconds)))
     try:
         yield
     finally:
-        for task in background_tasks:
+        for task in tasks:
             task.cancel()
-        for task in background_tasks:
+        for task in tasks:
             with suppress(asyncio.CancelledError):
                 await task
-        background_tasks.clear()
 
 
 app = FastAPI(title="docker-keep-alive", lifespan=lifespan)

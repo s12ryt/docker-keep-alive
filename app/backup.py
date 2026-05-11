@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import Column, DateTime, Integer, MetaData, Table, Text, create_engine, delete, insert, select
+from sqlalchemy.engine import Engine
 
 
 metadata = MetaData()
+_engine_cache: dict[str, Engine] = {}
 backups = Table(
     "docker_keep_alive_backups",
     metadata,
@@ -30,7 +32,10 @@ def normalize_database_url(url: str) -> str:
 class BackupStore:
     def __init__(self, database_url: str):
         self.database_url = normalize_database_url(database_url)
-        self.engine = create_engine(self.database_url, pool_pre_ping=True)
+        self.engine = _engine_cache.get(self.database_url)
+        if self.engine is None:
+            self.engine = create_engine(self.database_url, pool_pre_ping=True)
+            _engine_cache[self.database_url] = self.engine
         metadata.create_all(self.engine)
 
     def create_backup(self, payload: dict[str, Any], keep_only_latest: bool = False) -> int:
@@ -42,8 +47,8 @@ class BackupStore:
                 conn.execute(delete(backups).where(backups.c.id != backup_id))
             return backup_id
 
-    def list_backups(self) -> list[dict[str, Any]]:
-        stmt = select(backups.c.id, backups.c.created_at).order_by(backups.c.created_at.desc())
+    def list_backups(self, limit: int = 20) -> list[dict[str, Any]]:
+        stmt = select(backups.c.id, backups.c.created_at).order_by(backups.c.created_at.desc()).limit(limit)
         with self.engine.begin() as conn:
             return [{"id": row.id, "created_at": row.created_at.isoformat()} for row in conn.execute(stmt)]
 
