@@ -3,11 +3,11 @@ from app.backup import BackupStore
 
 
 def test_restore_latest_backup_loads_database_snapshot(tmp_path) -> None:
-    original_backup_url = state.backup_url
+    original_backup_url = state.get_backup_url()
     original_snapshot = state.snapshot()
     database_url = f"sqlite:///{tmp_path / 'backup.db'}"
     try:
-        state.backup_url = database_url
+        state.set_backup_url(database_url)
         state.restore({"urls": [], "notify_enabled": False, "backup_url": database_url})
         BackupStore(database_url).create_backup(
             {
@@ -24,4 +24,4 @@ def test_restore_latest_backup_loads_database_snapshot(tmp_path) -> None:
         assert snapshot["notify_enabled"] is True
     finally:
         state.restore(original_snapshot)
-        state.backup_url = original_backup_url
+        state.set_backup_url(original_backup_url)

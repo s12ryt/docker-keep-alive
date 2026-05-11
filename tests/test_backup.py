@@ -47,3 +47,19 @@ def test_delete_backups_except(tmp_path) -> None:
     assert deleted_count == 1
     assert store.get_backup(old_id) is None
     assert store.get_backup(keep_id)["urls"][0]["url"] == "https://keep.example.com"
+
+
+def test_backup_store_reuses_engine_for_same_database_url(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'backup.db'}"
+    first = BackupStore(database_url)
+    second = BackupStore(database_url)
+
+    assert first.engine is second.engine
+
+
+def test_list_backups_uses_limit(tmp_path) -> None:
+    store = BackupStore(f"sqlite:///{tmp_path / 'backup.db'}")
+    for idx in range(3):
+        store.create_backup({"urls": [{"url": f"https://{idx}.example.com"}], "notify_enabled": False})
+
+    assert len(store.list_backups(limit=2)) == 2

@@ -19,6 +19,7 @@
 | `backup` | 否 | MySQL/PostgreSQL 連線網址，用於每 10 分鐘備份 |
 | `PORT` | 否 | Web 服務連接埠，預設 `8080` |
 | `KEEPALIVE_INTERVAL_SECONDS` | 否 | 保活間隔，預設 `300` |
+| `BACKUP_INTERVAL_SECONDS` | 否 | 備份間隔，預設 `600` |
 
 也支援大寫別名：`BOT_ID`、`CHAT_ID`、`BACKUP`。
 
