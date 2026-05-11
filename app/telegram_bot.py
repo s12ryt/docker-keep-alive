@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import asyncio
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from telegram import BotCommand, Update
+from telegram.error import Conflict, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from .backup import BackupStore
@@ -10,6 +14,7 @@ from .state import AppState
 
 
 PendingAction = dict[str, str | list[dict[str, str]]]
+logger = logging.getLogger(__name__)
 
 COMMAND_LIST_TEXT = """可用指令：
 /start - 啟動 bot 並顯示這份指令列表
@@ -232,14 +237,51 @@ def build_application(state: AppState, bot_token: str, allowed_chat_id: str) -> 
     return application
 
 
-async def run_bot(state: AppState, bot_token: str, allowed_chat_id: str) -> Callable[[str], Awaitable[None]]:
+@dataclass
+class BotRuntime:
+    application: Application
+
+    async def notify(self, text: str, chat_id: str) -> None:
+        await self.application.bot.send_message(chat_id=chat_id, text=text)
+
+    async def stop_polling(self) -> None:
+        updater = self.application.updater
+        if updater and updater.running:
+            try:
+                await updater.stop()
+            except RuntimeError:
+                return
+
+    async def shutdown(self) -> None:
+        await self.stop_polling()
+        if self.application.running:
+            await self.application.stop()
+        await self.application.shutdown()
+
+
+def polling_error_callback(runtime: BotRuntime) -> Callable[[TelegramError], None]:
+    def handle_error(error: TelegramError) -> None:
+        if isinstance(error, Conflict):
+            logger.warning(
+                "Telegram polling conflict detected; another bot instance is already using getUpdates. "
+                "Stopping polling for this instance while keeping the web service alive."
+            )
+            asyncio.create_task(runtime.stop_polling())
+            return
+        logger.exception("Telegram polling error.", exc_info=error)
+
+    return handle_error
+
+
+async def run_bot(state: AppState, bot_token: str, allowed_chat_id: str) -> BotRuntime:
     application = build_application(state, bot_token, allowed_chat_id)
+    runtime = BotRuntime(application)
     await application.initialize()
     await application.bot.set_my_commands(bot_menu_commands())
     await application.start()
-    await application.updater.start_polling(drop_pending_updates=True)
+    await application.updater.start_polling(
+        drop_pending_updates=True,
+        error_callback=polling_error_callback(runtime),
+    )
 
-    async def notify(text: str) -> None:
-        await application.bot.send_message(chat_id=allowed_chat_id, text=text)
-
-    return notify
+    return runtime

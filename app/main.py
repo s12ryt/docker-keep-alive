@@ -13,7 +13,7 @@ from .backup import BackupStore
 from .config import Settings
 from .keepalive import backup_loop, keepalive_loop
 from .state import AppState
-from .telegram_bot import run_bot
+from .telegram_bot import BotRuntime, run_bot
 
 
 settings = Settings.from_env()
@@ -42,8 +42,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     notify = noop_notify
     tasks: list[asyncio.Task] = []
+    bot_runtime: BotRuntime | None = None
     if settings.bot_token and settings.chat_id and not os.getenv("DISABLE_TELEGRAM"):
-        notify = await run_bot(state, settings.bot_token, settings.chat_id)
+        bot_runtime = await run_bot(state, settings.bot_token, settings.chat_id)
+
+        async def telegram_notify(text: str) -> None:
+            await bot_runtime.notify(text, settings.chat_id)
+
+        notify = telegram_notify
     tasks.append(asyncio.create_task(keepalive_loop(state, settings.keepalive_interval_seconds, notify)))
     tasks.append(asyncio.create_task(backup_loop(state, settings.backup_interval_seconds)))
     try:
@@ -54,6 +60,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         for task in tasks:
             with suppress(asyncio.CancelledError):
                 await task
+        if bot_runtime:
+            await bot_runtime.shutdown()
 
 
 app = FastAPI(title="docker-keep-alive", lifespan=lifespan)
