@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import os
-from contextlib import asynccontextmanager, suppress
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI
@@ -72,11 +74,42 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="docker-keep-alive", lifespan=lifespan)
 
 
+def _mask_text(value: str, visible_prefix: int = 4, visible_suffix: int = 3) -> str:
+    if not value:
+        return ""
+    if len(value) <= visible_prefix + visible_suffix:
+        return "•" * len(value)
+    return f"{value[:visible_prefix]}••••{value[-visible_suffix:]}"
+
+
+def mask_url_for_display(url: str) -> str:
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return _mask_text(url)
+
+    if not parsed.scheme or not parsed.netloc:
+        return _mask_text(url)
+
+    hostname = parsed.hostname or parsed.netloc
+    masked_host = _mask_text(hostname, visible_prefix=3, visible_suffix=3)
+    port = f":{parsed.port}" if parsed.port else ""
+    suffix = "/•••" if parsed.path or parsed.query or parsed.fragment else ""
+    return f"{parsed.scheme}://{masked_host}{port}{suffix}"
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     snapshot = state.snapshot()
     rows = "".join(
-        f"<tr><td>{idx}</td><td>{item['url']}</td><td>{item['last_status']}</td><td>{item['last_code'] or ''}</td><td>{item['last_checked_at'] or '尚未執行'}</td><td>{item['last_error'] or ''}</td></tr>"
+        "<tr>"
+        f"<td>{idx}</td>"
+        f"<td>{html.escape(mask_url_for_display(item['url']))}</td>"
+        f"<td>{html.escape(str(item['last_status']))}</td>"
+        f"<td>{html.escape(str(item['last_code'] or ''))}</td>"
+        f"<td>{html.escape(str(item['last_checked_at'] or '尚未執行'))}</td>"
+        f"<td>{html.escape(str(item['last_error'] or ''))}</td>"
+        "</tr>"
         for idx, item in enumerate(snapshot["urls"], start=1)
     )
     if not rows:
@@ -99,7 +132,7 @@ async def index() -> str:
     </head>
     <body><main>
       <h1>docker-keep-alive</h1>
-      <p>服務已啟動：{snapshot['started_at']}｜通知：{notify}｜第三方保活端點：<code>/s12ryt</code></p>
+      <p>服務已啟動：{html.escape(str(snapshot['started_at']))}｜通知：{notify}</p>
       <table><thead><tr><th>#</th><th>網址</th><th>狀態</th><th>HTTP</th><th>最後檢查</th><th>錯誤</th></tr></thead><tbody>{rows}</tbody></table>
     </main></body></html>
     """
