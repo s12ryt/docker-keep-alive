@@ -46,6 +46,10 @@ class AppState:
     backup_url: str | None = None
     _lock: RLock = field(default_factory=RLock, repr=False)
 
+    def list_urls(self) -> list[tuple[int, str]]:
+        with self._lock:
+            return [(idx, item.url) for idx, item in enumerate(self.urls)]
+
     def add_url(self, url: str) -> bool:
         normalized = url.strip()
         with self._lock:
@@ -59,6 +63,38 @@ class AppState:
             if index < 0 or index >= len(self.urls):
                 return None
             return self.urls.pop(index)
+
+    def update_url_status(
+        self,
+        index: int,
+        *,
+        last_status: str,
+        last_code: int | None,
+        last_error: str | None,
+        last_checked_at: str,
+    ) -> str | None:
+        with self._lock:
+            if index < 0 or index >= len(self.urls):
+                return None
+            target = self.urls[index]
+            target.last_status = last_status
+            target.last_code = last_code
+            target.last_error = last_error
+            target.last_checked_at = last_checked_at
+            return target.url
+
+    def toggle_notify(self) -> bool:
+        with self._lock:
+            self.notify_enabled = not self.notify_enabled
+            return self.notify_enabled
+
+    def get_backup_url(self) -> str | None:
+        with self._lock:
+            return self.backup_url
+
+    def set_backup_url(self, database_url: str | None) -> None:
+        with self._lock:
+            self.backup_url = database_url
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
