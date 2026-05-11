@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from .backup import BackupStore
 from .config import Settings
 from .keepalive import backup_loop, keepalive_loop
 from .state import AppState
@@ -20,10 +21,24 @@ state = AppState(backup_url=settings.backup_url)
 background_tasks: list[asyncio.Task] = []
 
 
+def restore_latest_backup() -> None:
+    if not state.backup_url:
+        return
+    try:
+        latest = BackupStore(state.backup_url).get_latest_backup()
+    except Exception:
+        # 資料庫短暫不可用時仍應啟動 web 與 Telegram 控制面板。
+        return
+    if latest:
+        state.restore(latest)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     async def noop_notify(text: str) -> None:
         return None
+
+    restore_latest_backup()
 
     notify = noop_notify
     if settings.bot_token and settings.chat_id and not os.getenv("DISABLE_TELEGRAM"):
