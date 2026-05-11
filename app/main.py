@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncIterator
 
 import uvicorn
 from fastapi import FastAPI
@@ -15,8 +17,31 @@ from .telegram_bot import run_bot
 
 settings = Settings.from_env()
 state = AppState(backup_url=settings.backup_url)
-app = FastAPI(title="docker-keep-alive")
 background_tasks: list[asyncio.Task] = []
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def noop_notify(text: str) -> None:
+        return None
+
+    notify = noop_notify
+    if settings.bot_token and settings.chat_id and not os.getenv("DISABLE_TELEGRAM"):
+        notify = await run_bot(state, settings.bot_token, settings.chat_id)
+    background_tasks.append(asyncio.create_task(keepalive_loop(state, settings.keepalive_interval_seconds, notify)))
+    background_tasks.append(asyncio.create_task(backup_loop(state, settings.backup_interval_seconds)))
+    try:
+        yield
+    finally:
+        for task in background_tasks:
+            task.cancel()
+        for task in background_tasks:
+            with suppress(asyncio.CancelledError):
+                await task
+        background_tasks.clear()
+
+
+app = FastAPI(title="docker-keep-alive", lifespan=lifespan)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -65,24 +90,6 @@ async def api_state() -> dict:
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    async def noop_notify(text: str) -> None:
-        return None
-
-    notify = noop_notify
-    if settings.bot_token and settings.chat_id and not os.getenv("DISABLE_TELEGRAM"):
-        notify = await run_bot(state, settings.bot_token, settings.chat_id)
-    background_tasks.append(asyncio.create_task(keepalive_loop(state, settings.keepalive_interval_seconds, notify)))
-    background_tasks.append(asyncio.create_task(backup_loop(state, settings.backup_interval_seconds)))
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    for task in background_tasks:
-        task.cancel()
 
 
 if __name__ == "__main__":
