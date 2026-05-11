@@ -41,7 +41,7 @@ async def backup_loop(state: AppState, interval_seconds: int) -> None:
         if not state.backup_url:
             continue
         try:
-            BackupStore(state.backup_url).create_backup(state.snapshot())
+            BackupStore(state.backup_url).create_backup(state.snapshot(), keep_only_latest=True)
         except Exception:
             # 備份失敗不能讓主服務退出；使用者仍可透過 /state 查看服務狀態。
             continue
