@@ -20,6 +20,7 @@
 | `PORT` | 否 | Web 服務連接埠，預設 `8080` |
 | `KEEPALIVE_INTERVAL_SECONDS` | 否 | 保活間隔，預設 `300` |
 | `BACKUP_INTERVAL_SECONDS` | 否 | 備份間隔，預設 `600` |
+| `TELEGRAM_CONFLICT_RETRY_SECONDS` | 否 | Telegram polling 衝突後重試間隔，預設 `60` |
 
 也支援大寫別名：`BOT_ID`、`CHAT_ID`、`BACKUP`。
 
@@ -40,7 +41,7 @@
 未授權 chat id 會直接忽略，不回覆訊息以節省流量。
 未知指令會提示使用 `/help` 查看可用指令。
 啟動時會透過 Telegram Bot API `setMyCommands` 註冊原生命令選單；因 Telegram 原生選單不允許指令名稱包含 `-`，選單中使用 `/sub_url`、`/del_url`，原本 issue 要求的 `/sub-url`、`/del-url` 仍然可用。
-同一個 Telegram Bot Token 同一時間只能有一個 long polling instance；如果另一個容器或程序正在使用同一個 token，本服務會停止本 instance 的 Telegram polling、避免重複 traceback，Web 與保活功能仍會繼續運作。
+同一個 Telegram Bot Token 同一時間只能有一個 long polling instance；如果另一個容器或程序正在使用同一個 token，本服務會暫停本 instance 的 Telegram polling、避免重複 traceback，Web 與保活功能仍會繼續運作，並依 `TELEGRAM_CONFLICT_RETRY_SECONDS` 自動重試恢復 polling。
 
 ## 本機執行
 
