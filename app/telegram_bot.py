@@ -11,6 +11,17 @@ from .state import AppState
 
 PendingAction = dict[str, str | list[dict[str, str]]]
 
+COMMAND_LIST_TEXT = """可用指令：
+/start - 啟動 bot 並顯示這份指令列表
+/help - 顯示指令列表
+/commands - 顯示指令列表
+/state - 查看保活網址與目前狀態
+/sub-url - 新增一個保活網址
+/del-url - 列出並刪除保活網址
+/notify - 切換每次保活通知
+/backup - 立即備份，未設定資料庫時會要求輸入 MySQL/PostgreSQL URL
+/rebackup - 從備份恢復，未設定資料庫時會要求輸入 MySQL/PostgreSQL URL"""
+
 
 def _authorized(update: Update, allowed_chat_id: str) -> bool:
     return bool(update.effective_chat and str(update.effective_chat.id) == str(allowed_chat_id))
@@ -33,7 +44,11 @@ class BotController:
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if _authorized(update, self.allowed_chat_id):
-            await _reply(update, "ciallo~")
+            await _reply(update, f"ciallo~\n\n{COMMAND_LIST_TEXT}")
+
+    async def help_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if _authorized(update, self.allowed_chat_id):
+            await _reply(update, COMMAND_LIST_TEXT)
 
     async def state_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if _authorized(update, self.allowed_chat_id):
@@ -99,6 +114,10 @@ class BotController:
             await self._show_backups_for_restore(update, text)
         elif kind == "restore":
             await self._handle_restore(update, text, action.get("backups", []))
+
+    async def unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if _authorized(update, self.allowed_chat_id):
+            await _reply(update, "找不到這個指令。請輸入 /help 查看可用指令列表。")
 
     async def _handle_sub_url(self, update: Update, text: str) -> None:
         if not _valid_url(text):
@@ -174,6 +193,8 @@ def build_application(state: AppState, bot_token: str, allowed_chat_id: str) -> 
     controller = BotController(state, allowed_chat_id)
     application.bot_data["controller"] = controller
     application.add_handler(CommandHandler("start", controller.start))
+    application.add_handler(CommandHandler("help", controller.help_cmd))
+    application.add_handler(CommandHandler("commands", controller.help_cmd))
     application.add_handler(CommandHandler("state", controller.state_cmd))
     sub_url_handler, del_url_handler = hyphen_command_handlers()
     application.add_handler(sub_url_handler)
@@ -181,6 +202,7 @@ def build_application(state: AppState, bot_token: str, allowed_chat_id: str) -> 
     application.add_handler(CommandHandler("notify", controller.notify))
     application.add_handler(CommandHandler("backup", controller.backup))
     application.add_handler(CommandHandler("rebackup", controller.rebackup))
+    application.add_handler(MessageHandler(filters.COMMAND, controller.unknown_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, controller.text_message))
     return application
 
