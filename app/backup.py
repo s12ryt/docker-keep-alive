@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy import DateTime, Integer, MetaData, Table, Text, Column, create_engine, insert, select
+
+
+metadata = MetaData()
+backups = Table(
+    "docker_keep_alive_backups",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("payload", Text, nullable=False),
+)
+
+
+def normalize_database_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgres://")
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    if url.startswith("mysql://"):
+        return "mysql+pymysql://" + url.removeprefix("mysql://")
+    return url
+
+
+class BackupStore:
+    def __init__(self, database_url: str):
+        self.database_url = normalize_database_url(database_url)
+        self.engine = create_engine(self.database_url, pool_pre_ping=True)
+        metadata.create_all(self.engine)
+
+    def create_backup(self, payload: dict[str, Any]) -> int:
+        created_at = datetime.now(timezone.utc)
+        with self.engine.begin() as conn:
+            result = conn.execute(insert(backups).values(created_at=created_at, payload=json.dumps(payload, ensure_ascii=False)))
+            return int(result.inserted_primary_key[0])
+
+    def list_backups(self) -> list[dict[str, Any]]:
+        stmt = select(backups.c.id, backups.c.created_at).order_by(backups.c.created_at.desc())
+        with self.engine.begin() as conn:
+            return [{"id": row.id, "created_at": row.created_at.isoformat()} for row in conn.execute(stmt)]
+
+    def get_backup(self, backup_id: int) -> dict[str, Any] | None:
+        stmt = select(backups.c.payload).where(backups.c.id == backup_id)
+        with self.engine.begin() as conn:
+            row = conn.execute(stmt).first()
+        if row is None:
+            return None
+        return json.loads(row.payload)
