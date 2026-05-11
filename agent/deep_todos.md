@@ -10,4 +10,4 @@
 - [x] 優化 Telegram 使用體驗：新增 `/help`、`/commands` 指令列表，`/start` 顯示指令列表，未知指令提示使用 `/help`，並補上測試與 README。
 - [x] 新增 Telegram `setMyCommands` 原生命令選單：保留 `/sub-url`、`/del-url`，並提供可被 Telegram 選單註冊的 `/sub_url`、`/del_url` 別名。
 - [x] Issue #8 數據庫優化：定期備份只保留最新一筆，啟動/重啟時自動從資料庫載入最新備份，並補上 SQLite 測試。
-- [x] Issue #7 bug/潛在問題修補：補齊 state 鎖保護 API、保活並發、BackupStore engine 重用、避免手動 DB URL 覆蓋自動備份 URL、移除 lifespan 全域 task list，並補文件與測試。
+- [x] Issue #7 bug/潛在問題修補：補齊 state 鎖保護 API、保活並發、BackupStore engine 重用、避免手動 DB URL 覆蓋自動備份 URL、移除 lifespan 全域 task list、放寬依賴版本、改用 multi-stage Docker build，並補文件與測試。

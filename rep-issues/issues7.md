@@ -39,6 +39,10 @@ Issue 指出目前程式有以下 bug 或可維護性問題：
   - `list_backups(limit=20)` 增加預設數量限制。
 - `main.py`：
   - lifespan 內使用 local `tasks`，移除跨 lifespan 全域 `background_tasks`。
+- `requirements.txt`：
+  - 將主要 runtime dependency 改成 `>=` 搭配相容上限，保留取得安全修復的彈性。
+- `Dockerfile`：
+  - 改為 multi-stage build，builder 先產生 wheels，runtime 只安裝 wheelhouse 內容並複製 app。
 - 文件與測試：
   - README 補上 `BACKUP_INTERVAL_SECONDS`。
   - 新增/更新測試覆蓋鎖保護 API、並發保活、手動 DB URL 不覆蓋自動備份 URL、engine 重用與列表 limit。
@@ -52,4 +56,6 @@ Issue 指出目前程式有以下 bug 或可維護性問題：
 - 背景任務不再依賴全域 task list。
 - 多 URL 保活可並發執行。
 - README 有 `BACKUP_INTERVAL_SECONDS` 說明。
+- requirements 不再完全鎖死 patch 版本。
+- Dockerfile 使用 multi-stage build。
 - 測試通過。
