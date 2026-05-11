@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.telegram_bot import COMMAND_LIST_TEXT, hyphen_command_handlers
+from app.telegram_bot import COMMAND_LIST_TEXT, bot_menu_commands, hyphen_command_handlers
 
 
 def test_s12ryt_endpoint() -> None:
@@ -31,5 +31,25 @@ def test_hyphen_commands_can_be_registered() -> None:
 
 
 def test_command_list_mentions_all_user_commands() -> None:
-    for command in ["/start", "/help", "/commands", "/state", "/sub-url", "/del-url", "/notify", "/backup", "/rebackup"]:
+    for command in [
+        "/start",
+        "/help",
+        "/commands",
+        "/state",
+        "/sub-url",
+        "/sub_url",
+        "/del-url",
+        "/del_url",
+        "/notify",
+        "/backup",
+        "/rebackup",
+    ]:
         assert command in COMMAND_LIST_TEXT
+
+
+def test_bot_menu_commands_are_valid_for_set_my_commands() -> None:
+    commands = bot_menu_commands()
+    command_names = [item.command for item in commands]
+    assert command_names == ["start", "help", "commands", "state", "sub_url", "del_url", "notify", "backup", "rebackup"]
+    assert all("-" not in item.command for item in commands)
+    assert all(item.description for item in commands)

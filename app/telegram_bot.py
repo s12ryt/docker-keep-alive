@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from .backup import BackupStore
@@ -16,11 +16,33 @@ COMMAND_LIST_TEXT = """可用指令：
 /help - 顯示指令列表
 /commands - 顯示指令列表
 /state - 查看保活網址與目前狀態
-/sub-url - 新增一個保活網址
-/del-url - 列出並刪除保活網址
+/sub-url 或 /sub_url - 新增一個保活網址
+/del-url 或 /del_url - 列出並刪除保活網址
 /notify - 切換每次保活通知
 /backup - 立即備份，未設定資料庫時會要求輸入 MySQL/PostgreSQL URL
 /rebackup - 從備份恢復，未設定資料庫時會要求輸入 MySQL/PostgreSQL URL"""
+
+BOT_MENU_COMMANDS = (
+    ("start", "啟動 bot 並顯示指令列表"),
+    ("help", "顯示指令列表"),
+    ("commands", "顯示指令列表"),
+    ("state", "查看保活網址與目前狀態"),
+    ("sub_url", "新增一個保活網址"),
+    ("del_url", "列出並刪除保活網址"),
+    ("notify", "切換每次保活通知"),
+    ("backup", "立即備份"),
+    ("rebackup", "從備份恢復"),
+)
+
+
+def bot_menu_commands() -> tuple[BotCommand, ...]:
+    """Build Telegram menu commands for setMyCommands.
+
+    Telegram Bot API menu commands cannot contain hyphens, so `/sub-url` and
+    `/del-url` keep working as text commands while `/sub_url` and `/del_url`
+    are exposed in the native Telegram command menu.
+    """
+    return tuple(BotCommand(command=command, description=description) for command, description in BOT_MENU_COMMANDS)
 
 
 def _authorized(update: Update, allowed_chat_id: str) -> bool:
@@ -196,6 +218,8 @@ def build_application(state: AppState, bot_token: str, allowed_chat_id: str) -> 
     application.add_handler(CommandHandler("help", controller.help_cmd))
     application.add_handler(CommandHandler("commands", controller.help_cmd))
     application.add_handler(CommandHandler("state", controller.state_cmd))
+    application.add_handler(CommandHandler("sub_url", controller.sub_url))
+    application.add_handler(CommandHandler("del_url", controller.del_url))
     sub_url_handler, del_url_handler = hyphen_command_handlers()
     application.add_handler(sub_url_handler)
     application.add_handler(del_url_handler)
@@ -210,6 +234,7 @@ def build_application(state: AppState, bot_token: str, allowed_chat_id: str) -> 
 async def run_bot(state: AppState, bot_token: str, allowed_chat_id: str) -> Callable[[str], Awaitable[None]]:
     application = build_application(state, bot_token, allowed_chat_id)
     await application.initialize()
+    await application.bot.set_my_commands(bot_menu_commands())
     await application.start()
     await application.updater.start_polling(drop_pending_updates=True)
 

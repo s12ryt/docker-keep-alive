@@ -28,14 +28,15 @@
 - `/help`：顯示指令列表。
 - `/commands`：顯示指令列表。
 - `/state`：回覆目前保活網址與狀態。
-- `/sub-url`：新增保活網址。
-- `/del-url`：列出網址編號並刪除指定項目。
+- `/sub-url` 或 `/sub_url`：新增保活網址。
+- `/del-url` 或 `/del_url`：列出網址編號並刪除指定項目。
 - `/notify`：切換每次保活後的通知。
 - `/backup`：建立備份；未設定 `backup` 時會要求輸入資料庫網址。
 - `/rebackup`：列出備份並恢復指定備份；未設定 `backup` 時會要求輸入資料庫網址。
 
 未授權 chat id 會直接忽略，不回覆訊息以節省流量。
 未知指令會提示使用 `/help` 查看可用指令。
+啟動時會透過 Telegram Bot API `setMyCommands` 註冊原生命令選單；因 Telegram 原生選單不允許指令名稱包含 `-`，選單中使用 `/sub_url`、`/del_url`，原本 issue 要求的 `/sub-url`、`/del-url` 仍然可用。
 
 ## 本機執行
 
