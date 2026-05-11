@@ -9,3 +9,4 @@
 - [x] 修正容器啟動失敗：Telegram `CommandHandler` 不接受 `/sub-url`、`/del-url` 的 hyphen 指令，改用 regex `MessageHandler`，並將 FastAPI startup/shutdown 改為 lifespan 消除 `on_event` 棄用警告。本機測試通過：`py -m pytest -q`（8 passed）。
 - [x] 優化 Telegram 使用體驗：新增 `/help`、`/commands` 指令列表，`/start` 顯示指令列表，未知指令提示使用 `/help`，並補上測試與 README。
 - [x] 新增 Telegram `setMyCommands` 原生命令選單：保留 `/sub-url`、`/del-url`，並提供可被 Telegram 選單註冊的 `/sub_url`、`/del_url` 別名。
+- [x] Issue #8 數據庫優化：定期備份只保留最新一筆，啟動/重啟時自動從資料庫載入最新備份，並補上 SQLite 測試。
