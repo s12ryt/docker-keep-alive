@@ -14,3 +14,4 @@
 - [x] Issue #11 docker-bug：處理 Telegram getUpdates Conflict，改為簡短 warning 並停止本 instance polling，同時補上 Telegram runtime shutdown，避免容器 log 重複 traceback。
 - [x] Issue #13 tgbot：Telegram polling conflict 後改為依 `TELEGRAM_CONFLICT_RETRY_SECONDS` 自動重試恢復 polling，並避免重複排程 retry task。
 - [x] Issue #15 網頁隱私部分：首頁遮罩保活網址並移除第三方保活端點顯示，同時保留 `/s12ryt` endpoint 功能。
+- [x] Issue #16 TZ 變量：支援 `TZ=+0800` / `TZ=-0530` 這類 offset 格式，狀態時間與備份列表會依指定時區顯示。
