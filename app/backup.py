@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, Integer, MetaData, Table, Text, Column, create_engine, insert, select
+from sqlalchemy import Column, DateTime, Integer, MetaData, Table, Text, create_engine, delete, insert, select
 
 
 metadata = MetaData()
@@ -33,11 +33,14 @@ class BackupStore:
         self.engine = create_engine(self.database_url, pool_pre_ping=True)
         metadata.create_all(self.engine)
 
-    def create_backup(self, payload: dict[str, Any]) -> int:
+    def create_backup(self, payload: dict[str, Any], keep_only_latest: bool = False) -> int:
         created_at = datetime.now(timezone.utc)
         with self.engine.begin() as conn:
             result = conn.execute(insert(backups).values(created_at=created_at, payload=json.dumps(payload, ensure_ascii=False)))
-            return int(result.inserted_primary_key[0])
+            backup_id = int(result.inserted_primary_key[0])
+            if keep_only_latest:
+                conn.execute(delete(backups).where(backups.c.id != backup_id))
+            return backup_id
 
     def list_backups(self) -> list[dict[str, Any]]:
         stmt = select(backups.c.id, backups.c.created_at).order_by(backups.c.created_at.desc())
@@ -51,3 +54,16 @@ class BackupStore:
         if row is None:
             return None
         return json.loads(row.payload)
+
+    def get_latest_backup(self) -> dict[str, Any] | None:
+        stmt = select(backups.c.payload).order_by(backups.c.created_at.desc(), backups.c.id.desc()).limit(1)
+        with self.engine.begin() as conn:
+            row = conn.execute(stmt).first()
+        if row is None:
+            return None
+        return json.loads(row.payload)
+
+    def delete_backups_except(self, keep_id: int) -> int:
+        with self.engine.begin() as conn:
+            result = conn.execute(delete(backups).where(backups.c.id != keep_id))
+            return int(result.rowcount or 0)
