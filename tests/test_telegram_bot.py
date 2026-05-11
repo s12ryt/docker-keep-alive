@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from telegram.error import Conflict
 
@@ -59,21 +61,13 @@ async def test_manual_backup_url_does_not_override_existing_state(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_polling_conflict_callback_stops_polling(monkeypatch) -> None:
+async def test_polling_conflict_callback_schedules_recovery_once(monkeypatch) -> None:
     runtime = DummyRuntime()
-    scheduled = []
-
-    def fake_create_task(coro):
-        scheduled.append(coro)
-        return None
-
-    monkeypatch.setattr("app.telegram_bot.asyncio.create_task", fake_create_task)
 
     polling_error_callback(runtime)(Conflict("terminated by other getUpdates request"))
+    polling_error_callback(runtime)(Conflict("terminated by other getUpdates request"))
 
-    assert len(scheduled) == 1
-    await scheduled[0]
-    assert runtime.stopped is True
+    assert runtime.recovery_scheduled_count == 1
 
 
 @pytest.mark.asyncio
@@ -88,12 +82,25 @@ async def test_bot_runtime_shutdown_stops_application() -> None:
     assert application.shutdown_called is True
 
 
+@pytest.mark.asyncio
+async def test_bot_runtime_shutdown_cancels_conflict_retry() -> None:
+    application = DummyApplication()
+    runtime = BotRuntime(application, conflict_retry_seconds=60)
+    runtime._conflict_retry_task = asyncio.create_task(asyncio.sleep(60))
+
+    await runtime.shutdown()
+
+    assert runtime._conflict_retry_task.cancelled() is True
+
+
 class DummyRuntime:
     def __init__(self) -> None:
-        self.stopped = False
+        self.recovery_scheduled_count = 0
 
-    async def stop_polling(self) -> None:
-        self.stopped = True
+    def schedule_conflict_recovery(self) -> None:
+        if self.recovery_scheduled_count:
+            return
+        self.recovery_scheduled_count += 1
 
 
 class DummyUpdater:
