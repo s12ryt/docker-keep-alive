@@ -4,4 +4,5 @@
 - [x] 建立可部署的 Docker keep-alive 服務：網頁、`/s12ryt`、Telegram Bot、網址保活、備份/恢復。
 - [x] 加入 Dockerfile 與 GitHub Actions：測試、自動建置 GHCR 映像。
 - [x] 本機測試通過：`py -m pytest -q`（7 passed）。
+- [x] 修正 GitHub Actions pytest 找不到 `app` package：新增 `pyproject.toml` 設定 `pythonpath = ["."]`。
 - [ ] 推送分支並建立 PR 到 `s12ryt/docker-keep-alive`。
