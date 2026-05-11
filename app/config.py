@@ -16,6 +16,7 @@ class Settings:
     port: int
     keepalive_interval_seconds: int
     backup_interval_seconds: int = 600
+    telegram_conflict_retry_seconds: int = 60
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -33,4 +34,5 @@ class Settings:
             port=int(_env("PORT", "8080")),
             keepalive_interval_seconds=int(_env("KEEPALIVE_INTERVAL_SECONDS", "300")),
             backup_interval_seconds=int(_env("BACKUP_INTERVAL_SECONDS", "600")),
+            telegram_conflict_retry_seconds=int(_env("TELEGRAM_CONFLICT_RETRY_SECONDS", "60")),
         )

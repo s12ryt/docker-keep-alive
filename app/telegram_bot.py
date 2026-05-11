@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import dataclass, field
 
 from telegram import BotCommand, Update
 from telegram.error import Conflict, TelegramError
@@ -240,6 +241,8 @@ def build_application(state: AppState, bot_token: str, allowed_chat_id: str) -> 
 @dataclass
 class BotRuntime:
     application: Application
+    conflict_retry_seconds: int = 60
+    _conflict_retry_task: asyncio.Task | None = field(default=None, init=False, repr=False)
 
     async def notify(self, text: str, chat_id: str) -> None:
         await self.application.bot.send_message(chat_id=chat_id, text=text)
@@ -252,7 +255,38 @@ class BotRuntime:
             except RuntimeError:
                 return
 
+    async def start_polling(self) -> None:
+        await self.application.updater.start_polling(
+            drop_pending_updates=True,
+            error_callback=polling_error_callback(self),
+        )
+
+    def schedule_conflict_recovery(self) -> None:
+        if self._conflict_retry_task and not self._conflict_retry_task.done():
+            return
+        logger.warning(
+            "Telegram polling conflict detected; another bot instance is already using getUpdates. "
+            "Polling will retry in %s seconds while the web service keeps running.",
+            self.conflict_retry_seconds,
+        )
+        self._conflict_retry_task = asyncio.create_task(self._recover_polling_after_conflict())
+
+    async def _recover_polling_after_conflict(self) -> None:
+        await self.stop_polling()
+        await asyncio.sleep(self.conflict_retry_seconds)
+        if not self.application.running:
+            return
+        try:
+            await self.start_polling()
+            logger.info("Telegram polling restarted after conflict backoff.")
+        except Exception:  # noqa: BLE001 - 啟動 polling 失敗時只記錄，主服務仍需繼續
+            logger.exception("Failed to restart Telegram polling after conflict backoff.")
+
     async def shutdown(self) -> None:
+        if self._conflict_retry_task and not self._conflict_retry_task.done():
+            self._conflict_retry_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._conflict_retry_task
         await self.stop_polling()
         if self.application.running:
             await self.application.stop()
@@ -262,26 +296,19 @@ class BotRuntime:
 def polling_error_callback(runtime: BotRuntime) -> Callable[[TelegramError], None]:
     def handle_error(error: TelegramError) -> None:
         if isinstance(error, Conflict):
-            logger.warning(
-                "Telegram polling conflict detected; another bot instance is already using getUpdates. "
-                "Stopping polling for this instance while keeping the web service alive."
-            )
-            asyncio.create_task(runtime.stop_polling())
+            runtime.schedule_conflict_recovery()
             return
         logger.exception("Telegram polling error.", exc_info=error)
 
     return handle_error
 
 
-async def run_bot(state: AppState, bot_token: str, allowed_chat_id: str) -> BotRuntime:
+async def run_bot(state: AppState, bot_token: str, allowed_chat_id: str, conflict_retry_seconds: int = 60) -> BotRuntime:
     application = build_application(state, bot_token, allowed_chat_id)
-    runtime = BotRuntime(application)
+    runtime = BotRuntime(application, conflict_retry_seconds=conflict_retry_seconds)
     await application.initialize()
     await application.bot.set_my_commands(bot_menu_commands())
     await application.start()
-    await application.updater.start_polling(
-        drop_pending_updates=True,
-        error_callback=polling_error_callback(runtime),
-    )
+    await runtime.start_polling()
 
     return runtime

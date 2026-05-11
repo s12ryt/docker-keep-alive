@@ -44,7 +44,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     tasks: list[asyncio.Task] = []
     bot_runtime: BotRuntime | None = None
     if settings.bot_token and settings.chat_id and not os.getenv("DISABLE_TELEGRAM"):
-        bot_runtime = await run_bot(state, settings.bot_token, settings.chat_id)
+        bot_runtime = await run_bot(
+            state,
+            settings.bot_token,
+            settings.chat_id,
+            conflict_retry_seconds=settings.telegram_conflict_retry_seconds,
+        )
 
         async def telegram_notify(text: str) -> None:
             await bot_runtime.notify(text, settings.chat_id)
