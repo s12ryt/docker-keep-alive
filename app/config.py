@@ -16,6 +16,13 @@ def _env_int(name: str, default: str) -> int:
         raise RuntimeError(f"環境變數 {name} 必須是整數，目前值為 {value!r}") from exc
 
 
+def normalize_keepalive_path(value: str) -> str:
+    path = (value or "/s12ryt").strip()
+    if not path.startswith("/"):
+        path = f"/{path}"
+    return path.rstrip("/") or "/"
+
+
 @dataclass(frozen=True)
 class Settings:
     bot_token: str
@@ -25,6 +32,7 @@ class Settings:
     keepalive_interval_seconds: int
     backup_interval_seconds: int = 600
     telegram_conflict_retry_seconds: int = 60
+    keepalive_path: str = "/s12ryt"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -43,4 +51,5 @@ class Settings:
             keepalive_interval_seconds=_env_int("KEEPALIVE_INTERVAL_SECONDS", "300"),
             backup_interval_seconds=_env_int("BACKUP_INTERVAL_SECONDS", "600"),
             telegram_conflict_retry_seconds=_env_int("TELEGRAM_CONFLICT_RETRY_SECONDS", "60"),
+            keepalive_path=normalize_keepalive_path(_env("KEEPALIVE_PATH", "/s12ryt")),
         )

@@ -26,7 +26,7 @@ def test_update_url_status_and_toggle_notify() -> None:
     state.add_url("https://example.com")
 
     updated_url = state.update_url_status(
-        0,
+        "https://example.com",
         last_status="成功",
         last_code=200,
         last_error=None,
@@ -39,7 +39,7 @@ def test_update_url_status_and_toggle_notify() -> None:
     assert snapshot["urls"][0]["last_status"] == "成功"
     assert snapshot["urls"][0]["last_code"] == 200
     assert notify_enabled is True
-    assert state.update_url_status(99, last_status="失敗", last_code=None, last_error="missing", last_checked_at="now") is None
+    assert state.update_url_status("https://missing.example.com", last_status="失敗", last_code=None, last_error="missing", last_checked_at="now") is None
 
 
 def test_backup_url_accessors() -> None:

@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
 RUN adduser --system --no-create-home appuser
 
+COPY pyproject.toml ./
 COPY app ./app
 RUN chown -R appuser /app
 USER appuser

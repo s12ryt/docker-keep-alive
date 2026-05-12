@@ -1,4 +1,4 @@
-from app.backup import BackupStore, normalize_database_url
+from app.backup import BackupStore, clear_engine_cache, normalize_database_url
 
 
 def test_normalize_database_url() -> None:
@@ -55,6 +55,16 @@ def test_backup_store_reuses_engine_for_same_database_url(tmp_path) -> None:
     second = BackupStore(database_url)
 
     assert first.engine is second.engine
+
+
+def test_clear_engine_cache_discards_cached_engines(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'backup.db'}"
+    first = BackupStore(database_url)
+
+    clear_engine_cache()
+    second = BackupStore(database_url)
+
+    assert first.engine is not second.engine
 
 
 def test_list_backups_uses_limit(tmp_path) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from functools import cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -24,6 +25,7 @@ def timezone_from_offset(value: str | None) -> timezone | None:
     return timezone(sign * timedelta(hours=hours, minutes=minutes))
 
 
+@cache
 def configured_timezone() -> timezone | ZoneInfo:
     value = os.getenv("TZ")
     offset_timezone = timezone_from_offset(value)

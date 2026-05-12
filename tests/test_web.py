@@ -12,6 +12,12 @@ def test_s12ryt_endpoint() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_keepalive_endpoint_uses_configured_route() -> None:
+    paths = {route.path for route in app.routes}
+
+    assert "/s12ryt" in paths
+
+
 def test_index_page() -> None:
     with TestClient(app) as client:
         response = client.get("/")

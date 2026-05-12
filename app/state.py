@@ -72,9 +72,9 @@ class AppState:
     backup_url: str | None = None
     _lock: RLock = field(default_factory=RLock, repr=False)
 
-    def list_urls(self) -> list[tuple[int, str]]:
+    def list_urls(self) -> list[str]:
         with self._lock:
-            return [(idx, item.url) for idx, item in enumerate(self.urls)]
+            return [item.url for item in self.urls]
 
     def add_url(self, url: str) -> bool:
         normalized = url.strip()
@@ -90,9 +90,16 @@ class AppState:
                 return None
             return self.urls.pop(index)
 
+    def delete_url_by_value(self, url: str) -> TargetUrl | None:
+        with self._lock:
+            for index, item in enumerate(self.urls):
+                if item.url == url:
+                    return self.urls.pop(index)
+            return None
+
     def update_url_status(
         self,
-        index: int,
+        url: str,
         *,
         last_status: str,
         last_code: int | None,
@@ -100,9 +107,9 @@ class AppState:
         last_checked_at: str,
     ) -> str | None:
         with self._lock:
-            if index < 0 or index >= len(self.urls):
+            target = next((item for item in self.urls if item.url == url), None)
+            if target is None:
                 return None
-            target = self.urls[index]
             target.last_status = last_status
             target.last_code = last_code
             target.last_error = last_error
