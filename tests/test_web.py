@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.main import app, mask_url_for_display, state
+from app.main import app, state
+from app.state import mask_url_for_display
 from app.telegram_bot import COMMAND_LIST_TEXT, bot_menu_commands, hyphen_command_handlers
 
 
@@ -9,6 +10,12 @@ def test_s12ryt_endpoint() -> None:
         response = client.get("/s12ryt")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_keepalive_endpoint_uses_configured_route() -> None:
+    paths = {route.path for route in app.routes}
+
+    assert "/s12ryt" in paths
 
 
 def test_index_page() -> None:

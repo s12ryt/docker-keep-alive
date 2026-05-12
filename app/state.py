@@ -3,12 +3,37 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
+from urllib.parse import urlsplit
 
 from .timezone import now_iso
 
 
 def utc_now() -> str:
     return now_iso()
+
+
+def _mask_text(value: str, visible_prefix: int = 4, visible_suffix: int = 3) -> str:
+    if not value:
+        return ""
+    if len(value) <= visible_prefix + visible_suffix:
+        return "•" * len(value)
+    return f"{value[:visible_prefix]}••••{value[-visible_suffix:]}"
+
+
+def mask_url_for_display(url: str) -> str:
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return _mask_text(url)
+
+    if not parsed.scheme or not parsed.netloc:
+        return _mask_text(url)
+
+    hostname = parsed.hostname or parsed.netloc
+    masked_host = _mask_text(hostname, visible_prefix=3, visible_suffix=3)
+    port = f":{parsed.port}" if parsed.port else ""
+    suffix = "/•••" if parsed.path or parsed.query or parsed.fragment else ""
+    return f"{parsed.scheme}://{masked_host}{port}{suffix}"
 
 
 @dataclass
@@ -47,9 +72,9 @@ class AppState:
     backup_url: str | None = None
     _lock: RLock = field(default_factory=RLock, repr=False)
 
-    def list_urls(self) -> list[tuple[int, str]]:
+    def list_urls(self) -> list[str]:
         with self._lock:
-            return [(idx, item.url) for idx, item in enumerate(self.urls)]
+            return [item.url for item in self.urls]
 
     def add_url(self, url: str) -> bool:
         normalized = url.strip()
@@ -65,9 +90,16 @@ class AppState:
                 return None
             return self.urls.pop(index)
 
+    def delete_url_by_value(self, url: str) -> TargetUrl | None:
+        with self._lock:
+            for index, item in enumerate(self.urls):
+                if item.url == url:
+                    return self.urls.pop(index)
+            return None
+
     def update_url_status(
         self,
-        index: int,
+        url: str,
         *,
         last_status: str,
         last_code: int | None,
@@ -75,9 +107,9 @@ class AppState:
         last_checked_at: str,
     ) -> str | None:
         with self._lock:
-            if index < 0 or index >= len(self.urls):
+            target = next((item for item in self.urls if item.url == url), None)
+            if target is None:
                 return None
-            target = self.urls[index]
             target.last_status = last_status
             target.last_code = last_code
             target.last_error = last_error
@@ -123,5 +155,5 @@ class AppState:
             code = f" HTTP {item['last_code']}" if item["last_code"] else ""
             checked = item["last_checked_at"] or "尚未執行"
             err = f"，錯誤：{item['last_error']}" if item["last_error"] else ""
-            lines.append(f"{idx}. {item['url']}｜{status}{code}｜{checked}{err}")
+            lines.append(f"{idx}. {mask_url_for_display(item['url'])}｜{status}{code}｜{checked}{err}")
         return "\n".join(lines)

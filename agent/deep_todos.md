@@ -15,3 +15,4 @@
 - [x] Issue #13 tgbot：Telegram polling conflict 後改為依 `TELEGRAM_CONFLICT_RETRY_SECONDS` 自動重試恢復 polling，並避免重複排程 retry task。
 - [x] Issue #15 網頁隱私部分：首頁遮罩保活網址並移除第三方保活端點顯示，同時保留 `/s12ryt` endpoint 功能。
 - [x] Issue #16 TZ 變量：支援 `TZ=+0800` / `TZ=-0530` 這類 offset 格式，狀態時間與備份列表會依指定時區顯示。
+- [x] Issue #21 bug 與可優化點：延遲初始保活、修正 URL index race、遮罩 Telegram 刪除清單、備份 engine cache 可清理、記錄備份例外、非阻塞啟動恢復、自訂保活路徑並更新 Docker/README。

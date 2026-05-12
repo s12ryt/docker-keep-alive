@@ -16,6 +16,7 @@ WORKDIR /app
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
+COPY pyproject.toml ./
 COPY app ./app
 
 EXPOSE 8080

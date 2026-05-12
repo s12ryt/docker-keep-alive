@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from functools import cache
 
 
 _OFFSET_RE = re.compile(r"^([+-])(\d{2})(\d{2})$")
@@ -23,6 +24,7 @@ def timezone_from_offset(value: str | None) -> timezone | None:
     return timezone(sign * timedelta(hours=hours, minutes=minutes))
 
 
+@cache
 def configured_timezone() -> timezone:
     return timezone_from_offset(os.getenv("TZ")) or timezone.utc
 
