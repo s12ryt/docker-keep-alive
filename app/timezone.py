@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 _OFFSET_RE = re.compile(r"^([+-])(\d{2})(\d{2})$")
@@ -23,8 +24,17 @@ def timezone_from_offset(value: str | None) -> timezone | None:
     return timezone(sign * timedelta(hours=hours, minutes=minutes))
 
 
-def configured_timezone() -> timezone:
-    return timezone_from_offset(os.getenv("TZ")) or timezone.utc
+def configured_timezone() -> timezone | ZoneInfo:
+    value = os.getenv("TZ")
+    offset_timezone = timezone_from_offset(value)
+    if offset_timezone is not None:
+        return offset_timezone
+    if value:
+        try:
+            return ZoneInfo(value)
+        except ZoneInfoNotFoundError:
+            return timezone.utc
+    return timezone.utc
 
 
 def now_iso() -> str:

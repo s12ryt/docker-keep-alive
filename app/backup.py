@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from threading import Lock
 from datetime import datetime
 from typing import Any
 
@@ -12,6 +13,7 @@ from .timezone import configured_timezone, format_datetime
 
 metadata = MetaData()
 _engine_cache: dict[str, Engine] = {}
+_engine_cache_lock = Lock()
 backups = Table(
     "docker_keep_alive_backups",
     metadata,
@@ -34,10 +36,11 @@ def normalize_database_url(url: str) -> str:
 class BackupStore:
     def __init__(self, database_url: str):
         self.database_url = normalize_database_url(database_url)
-        self.engine = _engine_cache.get(self.database_url)
-        if self.engine is None:
-            self.engine = create_engine(self.database_url, pool_pre_ping=True)
-            _engine_cache[self.database_url] = self.engine
+        with _engine_cache_lock:
+            self.engine = _engine_cache.get(self.database_url)
+            if self.engine is None:
+                self.engine = create_engine(self.database_url, pool_pre_ping=True)
+                _engine_cache[self.database_url] = self.engine
         metadata.create_all(self.engine)
 
     def create_backup(self, payload: dict[str, Any], keep_only_latest: bool = False) -> int:

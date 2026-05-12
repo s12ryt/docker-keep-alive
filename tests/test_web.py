@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.main import app, mask_url_for_display, state
+from app.main import app, state
+from app.state import mask_url_for_display
 from app.telegram_bot import COMMAND_LIST_TEXT, bot_menu_commands, hyphen_command_handlers
 
 
@@ -54,6 +55,20 @@ def test_healthz_endpoint() -> None:
         response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_api_state_does_not_expose_backup_url() -> None:
+    original_snapshot = state.snapshot()
+    try:
+        with TestClient(app) as client:
+            state.set_backup_url("postgres://user:secret@example.com/db")
+            response = client.get("/api/state")
+
+        assert response.status_code == 200
+        assert "backup_url" not in response.json()
+        assert "secret" not in response.text
+    finally:
+        state.restore(original_snapshot)
 
 
 def test_hyphen_commands_can_be_registered() -> None:

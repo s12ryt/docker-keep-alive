@@ -5,7 +5,6 @@ import html
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI
@@ -14,7 +13,7 @@ from fastapi.responses import HTMLResponse
 from .backup import BackupStore
 from .config import Settings
 from .keepalive import backup_loop, keepalive_loop
-from .state import AppState
+from .state import AppState, mask_url_for_display
 from .telegram_bot import BotRuntime, run_bot
 
 
@@ -74,30 +73,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="docker-keep-alive", lifespan=lifespan)
 
 
-def _mask_text(value: str, visible_prefix: int = 4, visible_suffix: int = 3) -> str:
-    if not value:
-        return ""
-    if len(value) <= visible_prefix + visible_suffix:
-        return "•" * len(value)
-    return f"{value[:visible_prefix]}••••{value[-visible_suffix:]}"
-
-
-def mask_url_for_display(url: str) -> str:
-    try:
-        parsed = urlsplit(url)
-    except ValueError:
-        return _mask_text(url)
-
-    if not parsed.scheme or not parsed.netloc:
-        return _mask_text(url)
-
-    hostname = parsed.hostname or parsed.netloc
-    masked_host = _mask_text(hostname, visible_prefix=3, visible_suffix=3)
-    port = f":{parsed.port}" if parsed.port else ""
-    suffix = "/•••" if parsed.path or parsed.query or parsed.fragment else ""
-    return f"{parsed.scheme}://{masked_host}{port}{suffix}"
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     snapshot = state.snapshot()
@@ -145,7 +120,7 @@ async def keepalive_endpoint() -> dict[str, str]:
 
 @app.get("/api/state")
 async def api_state() -> dict:
-    return state.snapshot()
+    return state.public_snapshot()
 
 
 @app.get("/healthz")
