@@ -104,7 +104,50 @@ async def test_pending_action_expires() -> None:
 
 
 @pytest.mark.asyncio
-async def test_polling_conflict_callback_schedules_recovery_once(monkeypatch) -> None:
+async def test_del_url_lists_masked_urls_and_deletes_pending_url() -> None:
+    state = AppState()
+    secret_url = "https://secret.example.com/private/path?token=abc"
+    state.add_url(secret_url)
+    state.add_url("https://other.example.com")
+    controller = BotController(state, "123")
+    update = DummyUpdate()
+
+    await controller.del_url(update, None)
+
+    listed_text = update.effective_message.replies[-1]
+    assert secret_url not in listed_text
+    assert "token=abc" not in listed_text
+    assert "••••" in listed_text
+
+    state.delete_url_by_value("https://other.example.com")
+    update.effective_message.text = "1"
+    await controller.text_message(update, None)
+
+    snapshot = state.snapshot()
+    assert snapshot["urls"] == []
+    assert secret_url not in update.effective_message.replies[-1]
+
+
+@pytest.mark.asyncio
+async def test_del_url_does_not_delete_wrong_url_after_list_changes() -> None:
+    state = AppState()
+    state.add_url("https://first.example.com")
+    state.add_url("https://second.example.com")
+    controller = BotController(state, "123")
+    update = DummyUpdate()
+
+    await controller.del_url(update, None)
+    state.delete_url_by_value("https://first.example.com")
+    update.effective_message.text = "1"
+    await controller.text_message(update, None)
+
+    snapshot = state.snapshot()
+    assert [item["url"] for item in snapshot["urls"]] == ["https://second.example.com"]
+    assert update.effective_message.replies[-1] == "找不到這個網址，清單可能已變更。"
+
+
+@pytest.mark.asyncio
+async def test_polling_conflict_callback_schedules_recovery_once() -> None:
     runtime = DummyRuntime()
 
     polling_error_callback(runtime)(Conflict("terminated by other getUpdates request"))

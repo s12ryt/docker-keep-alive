@@ -17,12 +17,14 @@ def test_timezone_from_offset_rejects_invalid_values() -> None:
 
 def test_utc_now_uses_tz_offset(monkeypatch) -> None:
     monkeypatch.setenv("TZ", "+0800")
+    configured_timezone.cache_clear()
 
     assert utc_now().endswith("+08:00")
 
 
 def test_format_datetime_converts_to_configured_timezone(monkeypatch) -> None:
     monkeypatch.setenv("TZ", "-0530")
+    configured_timezone.cache_clear()
     value = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
 
     assert format_datetime(value) == "2026-05-12T02:30:00-05:30"
@@ -30,5 +32,18 @@ def test_format_datetime_converts_to_configured_timezone(monkeypatch) -> None:
 
 def test_configured_timezone_accepts_iana_name(monkeypatch) -> None:
     monkeypatch.setenv("TZ", "Asia/Taipei")
+    configured_timezone.cache_clear()
 
     assert configured_timezone().key == "Asia/Taipei"
+
+
+def test_configured_timezone_is_cached(monkeypatch) -> None:
+    configured_timezone.cache_clear()
+    monkeypatch.setenv("TZ", "+0800")
+    first = configured_timezone()
+    monkeypatch.setenv("TZ", "-0530")
+
+    assert configured_timezone() is first
+
+    configured_timezone.cache_clear()
+    assert configured_timezone().utcoffset(None).total_seconds() == -(5 * 60 + 30) * 60

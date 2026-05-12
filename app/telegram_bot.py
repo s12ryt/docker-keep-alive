@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from time import monotonic
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
+from time import monotonic
 
 from telegram import BotCommand, Update
 from telegram.error import Conflict, TelegramError
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from .backup import BackupStore
-from .state import AppState
+from .state import AppState, mask_url_for_display
 
 
-PendingAction = dict[str, str | float | list[dict[str, str]]]
+PendingAction = dict[str, str | float | list[str] | list[dict[str, str]]]
 logger = logging.getLogger(__name__)
 
 COMMAND_LIST_TEXT = """可用指令：
@@ -110,8 +110,8 @@ class BotController:
         if not urls:
             await _reply(update, "目前沒有可刪除的保活網址。")
             return
-        self._set_pending(update.effective_chat.id, {"action": "del-url"})
-        lines = [f"{idx}. {item['url']}" for idx, item in enumerate(urls, start=1)]
+        self._set_pending(update.effective_chat.id, {"action": "del-url", "urls": [item["url"] for item in urls]})
+        lines = [f"{idx}. {mask_url_for_display(item['url'])}" for idx, item in enumerate(urls, start=1)]
         lines.append("請打出你要刪除的網址編號:")
         await _reply(update, "\n".join(lines))
 
@@ -152,7 +152,7 @@ class BotController:
         if kind == "sub-url":
             await self._handle_sub_url(update, text)
         elif kind == "del-url":
-            await self._handle_del_url(update, text)
+            await self._handle_del_url(update, text, action.get("urls", []))
         elif kind == "backup-url":
             await self._create_backup(update, text)
         elif kind == "rebackup-url":
@@ -172,12 +172,17 @@ class BotController:
         added = self.state.add_url(text)
         await _reply(update, "已新增保活網址。" if added else "這個網址已經存在。")
 
-    async def _handle_del_url(self, update: Update, text: str) -> None:
+    async def _handle_del_url(self, update: Update, text: str, urls: list[str] | object = ()) -> None:
         if not text.isdigit():
             await _reply(update, "請輸入數字編號。")
             return
-        deleted = self.state.delete_url(int(text) - 1)
-        await _reply(update, f"已刪除：{deleted.url}" if deleted else "找不到這個編號。")
+        candidates = urls if isinstance(urls, list) else []
+        index = int(text) - 1
+        if index < 0 or index >= len(candidates):
+            await _reply(update, "找不到這個編號。")
+            return
+        deleted = self.state.delete_url_by_value(candidates[index])
+        await _reply(update, f"已刪除：{mask_url_for_display(deleted.url)}" if deleted else "找不到這個網址，清單可能已變更。")
 
     async def _create_backup(self, update: Update, database_url: str) -> None:
         try:

@@ -21,12 +21,12 @@ settings = Settings.from_env()
 state = AppState(backup_url=settings.backup_url)
 
 
-def restore_latest_backup() -> None:
+async def restore_latest_backup() -> None:
     backup_url = state.get_backup_url()
     if not backup_url:
         return
     try:
-        latest = BackupStore(backup_url).get_latest_backup()
+        latest = await asyncio.to_thread(lambda: BackupStore(backup_url).get_latest_backup())
     except Exception:
         # 資料庫短暫不可用時仍應啟動 web 與 Telegram 控制面板。
         return
@@ -39,7 +39,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     async def noop_notify(text: str) -> None:
         return None
 
-    restore_latest_backup()
+    await restore_latest_backup()
 
     notify = noop_notify
     tasks: list[asyncio.Task] = []
@@ -113,7 +113,7 @@ async def index() -> str:
     """
 
 
-@app.get("/s12ryt")
+@app.get(settings.keepalive_path)
 async def keepalive_endpoint() -> dict[str, str]:
     return {"status": "ok", "message": "ciallo~"}
 

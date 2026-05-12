@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
 
@@ -8,12 +9,15 @@ from .backup import BackupStore
 from .state import AppState, utc_now
 
 
+logger = logging.getLogger(__name__)
+
+
 async def ping_once(state: AppState) -> list[str]:
     targets = state.list_urls()
     if not targets:
         return []
 
-    async def ping_target(client: httpx.AsyncClient, index: int, url: str) -> str | None:
+    async def ping_target(client: httpx.AsyncClient, url: str) -> str | None:
         checked_at = utc_now()
         last_code: int | None = None
         last_error: str | None = None
@@ -25,7 +29,7 @@ async def ping_once(state: AppState) -> list[str]:
             last_status = "失敗"
             last_error = str(exc)
         current_url = state.update_url_status(
-            index,
+            url,
             last_status=last_status,
             last_code=last_code,
             last_error=last_error,
@@ -36,11 +40,12 @@ async def ping_once(state: AppState) -> list[str]:
         return f"{current_url}：{last_status}" + (f" HTTP {last_code}" if last_code else "")
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
-        messages = await asyncio.gather(*(ping_target(client, index, url) for index, url in targets))
+        messages = await asyncio.gather(*(ping_target(client, url) for url in targets))
     return [message for message in messages if message]
 
 
-async def keepalive_loop(state: AppState, interval_seconds: int, notify) -> None:
+async def keepalive_loop(state: AppState, interval_seconds: int, notify, initial_delay_seconds: int | None = None) -> None:
+    await asyncio.sleep(interval_seconds if initial_delay_seconds is None else initial_delay_seconds)
     while True:
         messages = await ping_once(state)
         if state.snapshot()["notify_enabled"] and messages:
@@ -58,4 +63,5 @@ async def backup_loop(state: AppState, interval_seconds: int) -> None:
             await asyncio.to_thread(lambda: BackupStore(backup_url).create_backup(state.snapshot(), keep_only_latest=True))
         except Exception:
             # 備份失敗不能讓主服務退出；使用者仍可透過 /state 查看服務狀態。
+            logger.exception("定期備份失敗。")
             continue

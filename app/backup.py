@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from threading import Lock
 from datetime import datetime
+from threading import Lock
 from typing import Any
 
 from sqlalchemy import Column, DateTime, Integer, MetaData, Table, Text, create_engine, delete, insert, select
@@ -31,6 +31,13 @@ def normalize_database_url(url: str) -> str:
     if url.startswith("mysql://"):
         return "mysql+pymysql://" + url.removeprefix("mysql://")
     return url
+
+
+def clear_engine_cache() -> None:
+    with _engine_cache_lock:
+        for engine in _engine_cache.values():
+            engine.dispose()
+        _engine_cache.clear()
 
 
 class BackupStore:

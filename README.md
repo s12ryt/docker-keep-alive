@@ -5,7 +5,7 @@
 ## 功能
 
 - 網頁首頁 `/`：查看 bot 與保活網址狀態。
-- 保活入口 `/s12ryt`：供第三方保活服務訪問。
+- 保活入口預設 `/s12ryt`：供第三方保活服務訪問，可用 `KEEPALIVE_PATH` 自訂。
 - Telegram Bot：新增/刪除網址、查看狀態、開關通知、備份/恢復。
 - Docker 映像：可由 GitHub Actions 自動推送至 GHCR。
 - 自動測試：Pull Request 與 push 時執行 pytest。
@@ -21,13 +21,15 @@
 | `KEEPALIVE_INTERVAL_SECONDS` | 否 | 保活間隔，預設 `300` |
 | `BACKUP_INTERVAL_SECONDS` | 否 | 備份間隔，預設 `600` |
 | `TELEGRAM_CONFLICT_RETRY_SECONDS` | 否 | Telegram polling 衝突後重試間隔，預設 `60` |
+| `KEEPALIVE_PATH` | 否 | 保活入口路徑，預設 `/s12ryt` |
 | `TZ` | 否 | 顯示時間的時區，例如 `Asia/Taipei`、`+0800`、`-0530`，預設 UTC |
 
 也支援大寫別名：`BOT_ID`、`CHAT_ID`、`BACKUP`。
 
 設定 `backup` 後，服務啟動或重啟時會自動讀取資料庫內最新備份並恢復狀態；定期備份每次完成後只保留最新備份，以避免資料庫長期累積過多資料。
 `TZ` 可使用 IANA 時區名稱或 `+HHMM` / `-HHMM` offset 格式控制狀態頁、保活檢查與備份列表的顯示時間，例如台灣時間可設定 `TZ=Asia/Taipei` 或 `TZ=+0800`。
-公開的 `/api/state` 不會回傳 `backup` 資料庫連線字串；網頁與 Telegram `/state` 也會遮罩保活網址以降低聊天紀錄與公開頁面的敏感資訊暴露風險。
+保活迴圈啟動後會先等待一個 `KEEPALIVE_INTERVAL_SECONDS`，避免容器頻繁重啟時立刻對目標網址送出請求。
+公開的 `/api/state` 不會回傳 `backup` 資料庫連線字串；網頁、Telegram `/state` 與 `/del_url` 刪除清單也會遮罩保活網址，以降低聊天紀錄與公開頁面的敏感資訊暴露風險。
 
 ## Telegram 指令
 
