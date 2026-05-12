@@ -61,6 +61,49 @@ async def test_manual_backup_url_does_not_override_existing_state(monkeypatch) -
 
 
 @pytest.mark.asyncio
+async def test_restore_uses_pending_database_url(monkeypatch) -> None:
+    state = AppState()
+    controller = BotController(state, "123")
+    update = DummyUpdate()
+    used_database_urls = []
+
+    class DummyStore:
+        def __init__(self, database_url: str) -> None:
+            used_database_urls.append(database_url)
+
+        def get_backup(self, backup_id: int):
+            return {"urls": [{"url": "https://restored.example.com"}], "notify_enabled": True}
+
+    monkeypatch.setattr("app.telegram_bot.BackupStore", DummyStore)
+
+    await controller._handle_restore(
+        update,
+        "1",
+        [{"id": "5", "created_at": "2026-05-12T00:00:00+00:00"}],
+        database_url="sqlite:///manual.db",
+    )
+
+    assert used_database_urls == ["sqlite:///manual.db"]
+    assert state.snapshot()["urls"][0]["url"] == "https://restored.example.com"
+    assert update.effective_message.replies == ["已恢復備份。"]
+
+
+@pytest.mark.asyncio
+async def test_pending_action_expires() -> None:
+    state = AppState()
+    controller = BotController(state, "123", pending_ttl_seconds=0)
+    update = DummyUpdate()
+    update.effective_message.text = "https://example.com"
+
+    controller._set_pending(update.effective_chat.id, {"action": "sub-url"})
+    await asyncio.sleep(0)
+    await controller.text_message(update, None)
+
+    assert state.snapshot()["urls"] == []
+    assert update.effective_message.replies == []
+
+
+@pytest.mark.asyncio
 async def test_polling_conflict_callback_schedules_recovery_once(monkeypatch) -> None:
     runtime = DummyRuntime()
 

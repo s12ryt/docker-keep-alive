@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from app.state import utc_now
-from app.timezone import format_datetime, timezone_from_offset
+from app.timezone import configured_timezone, format_datetime, timezone_from_offset
 
 
 def test_timezone_from_offset_accepts_plus_and_minus() -> None:
@@ -26,3 +26,9 @@ def test_format_datetime_converts_to_configured_timezone(monkeypatch) -> None:
     value = datetime(2026, 5, 12, 8, 0, tzinfo=timezone.utc)
 
     assert format_datetime(value) == "2026-05-12T02:30:00-05:30"
+
+
+def test_configured_timezone_accepts_iana_name(monkeypatch) -> None:
+    monkeypatch.setenv("TZ", "Asia/Taipei")
+
+    assert configured_timezone().key == "Asia/Taipei"

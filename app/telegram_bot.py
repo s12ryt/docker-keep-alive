@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from time import monotonic
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ from .backup import BackupStore
 from .state import AppState
 
 
-PendingAction = dict[str, str | list[dict[str, str]]]
+PendingAction = dict[str, str | float | list[dict[str, str]]]
 logger = logging.getLogger(__name__)
 
 COMMAND_LIST_TEXT = """可用指令：
@@ -65,10 +66,24 @@ def _valid_url(text: str) -> bool:
 
 
 class BotController:
-    def __init__(self, state: AppState, allowed_chat_id: str) -> None:
+    def __init__(self, state: AppState, allowed_chat_id: str, pending_ttl_seconds: int = 300) -> None:
         self.state = state
         self.allowed_chat_id = allowed_chat_id
+        self.pending_ttl_seconds = pending_ttl_seconds
         self.pending: dict[int, PendingAction] = {}
+
+    def _set_pending(self, chat_id: int, action: PendingAction) -> None:
+        action["expires_at"] = monotonic() + self.pending_ttl_seconds
+        self.pending[chat_id] = action
+
+    def _pop_pending(self, chat_id: int) -> PendingAction | None:
+        action = self.pending.pop(chat_id, None)
+        if not action:
+            return None
+        expires_at = action.get("expires_at")
+        if isinstance(expires_at, float) and monotonic() > expires_at:
+            return None
+        return action
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if _authorized(update, self.allowed_chat_id):
@@ -85,7 +100,7 @@ class BotController:
     async def sub_url(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(update, self.allowed_chat_id):
             return
-        self.pending[update.effective_chat.id] = {"action": "sub-url"}
+        self._set_pending(update.effective_chat.id, {"action": "sub-url"})
         await _reply(update, "我已收到請求! 請在下則訊息中給出完整網址並且不要給除了網址以外的東西:")
 
     async def del_url(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -95,7 +110,7 @@ class BotController:
         if not urls:
             await _reply(update, "目前沒有可刪除的保活網址。")
             return
-        self.pending[update.effective_chat.id] = {"action": "del-url"}
+        self._set_pending(update.effective_chat.id, {"action": "del-url"})
         lines = [f"{idx}. {item['url']}" for idx, item in enumerate(urls, start=1)]
         lines.append("請打出你要刪除的網址編號:")
         await _reply(update, "\n".join(lines))
@@ -113,7 +128,7 @@ class BotController:
         if backup_url:
             await self._create_backup(update, backup_url)
             return
-        self.pending[update.effective_chat.id] = {"action": "backup-url"}
+        self._set_pending(update.effective_chat.id, {"action": "backup-url"})
         await _reply(update, "我已收到請求! 請在下則訊息中給出完整的MySQL/postgres網址:")
 
     async def rebackup(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -123,13 +138,13 @@ class BotController:
         if backup_url:
             await self._show_backups_for_restore(update, backup_url)
             return
-        self.pending[update.effective_chat.id] = {"action": "rebackup-url"}
+        self._set_pending(update.effective_chat.id, {"action": "rebackup-url"})
         await _reply(update, "我已收到請求! 請在下則訊息中給出完整的MySQL/postgres網址:")
 
     async def text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not _authorized(update, self.allowed_chat_id) or not update.effective_chat or not update.effective_message:
             return
-        action = self.pending.pop(update.effective_chat.id, None)
+        action = self._pop_pending(update.effective_chat.id)
         if not action:
             return
         text = update.effective_message.text.strip()
@@ -143,7 +158,8 @@ class BotController:
         elif kind == "rebackup-url":
             await self._show_backups_for_restore(update, text)
         elif kind == "restore":
-            await self._handle_restore(update, text, action.get("backups", []))
+            database_url = action.get("database_url")
+            await self._handle_restore(update, text, action.get("backups", []), database_url if isinstance(database_url, str) else None)
 
     async def unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if _authorized(update, self.allowed_chat_id):
@@ -165,35 +181,36 @@ class BotController:
 
     async def _create_backup(self, update: Update, database_url: str) -> None:
         try:
-            backup_id = BackupStore(database_url).create_backup(self.state.snapshot())
+            backup_id = await asyncio.to_thread(lambda: BackupStore(database_url).create_backup(self.state.snapshot()))
             await _reply(update, f"備份完成，備份編號：{backup_id}")
         except Exception as exc:  # noqa: BLE001
             await _reply(update, f"備份失敗：{exc}")
 
     async def _show_backups_for_restore(self, update: Update, database_url: str) -> None:
         try:
-            items = BackupStore(database_url).list_backups()
+            items = await asyncio.to_thread(lambda: BackupStore(database_url).list_backups())
         except Exception as exc:  # noqa: BLE001
             await _reply(update, f"讀取備份失敗：{exc}")
             return
         if not items:
             await _reply(update, "目前沒有備份可恢復。")
             return
-        self.pending[update.effective_chat.id] = {
+        self._set_pending(update.effective_chat.id, {
             "action": "restore",
             "backups": [{"id": str(item["id"]), "created_at": item["created_at"]} for item in items],
-        }
+            "database_url": database_url,
+        })
         lines = [f"{idx}. {item['created_at']} (id={item['id']})" for idx, item in enumerate(items, start=1)]
         lines.append("請打出你要恢復的備份編號:")
         await _reply(update, "\n".join(lines))
 
-    async def _handle_restore(self, update: Update, text: str, backups: list[dict[str, str]]) -> None:
+    async def _handle_restore(self, update: Update, text: str, backups: list[dict[str, str]], database_url: str | None = None) -> None:
         if not text.isdigit() or int(text) < 1 or int(text) > len(backups):
             await _reply(update, "找不到這個備份編號。")
             return
         backup_id = int(backups[int(text) - 1]["id"])
-        database_url = self.state.get_backup_url()
-        payload = BackupStore(database_url).get_backup(backup_id) if database_url else None
+        database_url = database_url or self.state.get_backup_url()
+        payload = await asyncio.to_thread(lambda: BackupStore(database_url).get_backup(backup_id)) if database_url else None
         if not payload:
             await _reply(update, "找不到這個備份。")
             return

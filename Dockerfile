@@ -16,7 +16,11 @@ WORKDIR /app
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
+RUN adduser --system --no-create-home appuser
+
 COPY app ./app
+RUN chown -R appuser /app
+USER appuser
 
 EXPOSE 8080
 

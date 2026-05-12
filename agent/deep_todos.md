@@ -15,3 +15,4 @@
 - [x] Issue #13 tgbot：Telegram polling conflict 後改為依 `TELEGRAM_CONFLICT_RETRY_SECONDS` 自動重試恢復 polling，並避免重複排程 retry task。
 - [x] Issue #15 網頁隱私部分：首頁遮罩保活網址並移除第三方保活端點顯示，同時保留 `/s12ryt` endpoint 功能。
 - [x] Issue #16 TZ 變量：支援 `TZ=+0800` / `TZ=-0530` 這類 offset 格式，狀態時間與備份列表會依指定時區顯示。
+- [x] Issue #19 分析修補：隱藏公開 API 的 backup URL、修正手動 DB restore 來源、同步 DB 操作用 thread 包裝、支援 IANA TZ、pending TTL、Docker non-root 與設定錯誤提示。

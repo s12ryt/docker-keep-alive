@@ -3,12 +3,37 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
+from urllib.parse import urlsplit
 
 from .timezone import now_iso
 
 
 def utc_now() -> str:
     return now_iso()
+
+
+def _mask_text(value: str, visible_prefix: int = 4, visible_suffix: int = 3) -> str:
+    if not value:
+        return ""
+    if len(value) <= visible_prefix + visible_suffix:
+        return "•" * len(value)
+    return f"{value[:visible_prefix]}••••{value[-visible_suffix:]}"
+
+
+def mask_url_for_display(url: str) -> str:
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return _mask_text(url)
+
+    if not parsed.scheme or not parsed.netloc:
+        return _mask_text(url)
+
+    hostname = parsed.hostname or parsed.netloc
+    masked_host = _mask_text(hostname, visible_prefix=3, visible_suffix=3)
+    port = f":{parsed.port}" if parsed.port else ""
+    suffix = "/•••" if parsed.path or parsed.query or parsed.fragment else ""
+    return f"{parsed.scheme}://{masked_host}{port}{suffix}"
 
 
 @dataclass
@@ -106,6 +131,11 @@ class AppState:
                 "urls": [item.to_dict() for item in self.urls],
             }
 
+    def public_snapshot(self) -> dict[str, Any]:
+        data = self.snapshot()
+        data.pop("backup_url", None)
+        return data
+
     def restore(self, data: dict[str, Any]) -> None:
         with self._lock:
             self.notify_enabled = bool(data.get("notify_enabled", False))
@@ -123,5 +153,5 @@ class AppState:
             code = f" HTTP {item['last_code']}" if item["last_code"] else ""
             checked = item["last_checked_at"] or "尚未執行"
             err = f"，錯誤：{item['last_error']}" if item["last_error"] else ""
-            lines.append(f"{idx}. {item['url']}｜{status}{code}｜{checked}{err}")
+            lines.append(f"{idx}. {mask_url_for_display(item['url'])}｜{status}{code}｜{checked}{err}")
         return "\n".join(lines)

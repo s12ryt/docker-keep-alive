@@ -46,3 +46,23 @@ def test_backup_url_accessors() -> None:
     state = AppState()
     state.set_backup_url("sqlite:///backup.db")
     assert state.get_backup_url() == "sqlite:///backup.db"
+
+
+def test_public_snapshot_omits_backup_url() -> None:
+    state = AppState(backup_url="postgres://user:secret@example.com/db")
+    snapshot = state.public_snapshot()
+
+    assert "backup_url" not in snapshot
+
+
+def test_state_text_masks_urls() -> None:
+    state = AppState()
+    secret_url = "https://secret.example.com/private/path?token=super-secret-token"
+    state.add_url(secret_url)
+
+    text = state.state_text()
+
+    assert secret_url not in text
+    assert "super-secret-token" not in text
+    assert "private" not in text
+    assert "••••" in text
