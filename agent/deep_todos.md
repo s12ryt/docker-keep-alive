@@ -17,3 +17,4 @@
 - [x] Issue #16 TZ 變量：支援 `TZ=+0800` / `TZ=-0530` 這類 offset 格式，狀態時間與備份列表會依指定時區顯示。
 - [x] Issue #19 分析修補：隱藏公開 API 的 backup URL、修正手動 DB restore 來源、同步 DB 操作用 thread 包裝、支援 IANA TZ、pending TTL、Docker non-root 與設定錯誤提示。
 - [x] Issue #21 bug 與可優化點：延遲初始保活、修正 URL index race、遮罩 Telegram 刪除清單、備份 engine cache 可清理、記錄備份例外、非阻塞啟動恢復、自訂保活路徑並更新 Docker/README。
+- [x] Issue #24 awa：備份 payload 排除 `backup_url`、恢復時保留目前 DB URL 優先、缺少 DB URL 時回覆清楚錯誤、清理過期 Telegram pending action、測試自動清理 timezone cache。

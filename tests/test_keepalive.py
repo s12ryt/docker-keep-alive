@@ -3,7 +3,7 @@ import asyncio
 import httpx
 import pytest
 
-from app.keepalive import keepalive_loop, ping_once
+from app.keepalive import backup_loop, keepalive_loop, ping_once
 from app.state import AppState
 
 
@@ -104,3 +104,31 @@ async def test_keepalive_loop_allows_zero_initial_delay(monkeypatch) -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     assert notifications == ["保活完成：\ndone"]
+
+
+@pytest.mark.asyncio
+async def test_backup_loop_omits_backup_url_from_payload(monkeypatch) -> None:
+    state = AppState(backup_url="sqlite:///backup.db")
+    stored_payloads = []
+
+    class DummyStore:
+        def __init__(self, database_url: str) -> None:
+            assert database_url == "sqlite:///backup.db"
+
+        def create_backup(self, payload, keep_only_latest: bool = False) -> int:
+            stored_payloads.append(payload)
+            assert keep_only_latest is True
+            return 1
+
+    async def immediate_sleep(_seconds: int) -> None:
+        if stored_payloads:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("app.keepalive.BackupStore", DummyStore)
+    monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await backup_loop(state, 600)
+
+    assert stored_payloads
+    assert "backup_url" not in stored_payloads[0]
