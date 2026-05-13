@@ -50,6 +50,7 @@ async def test_manual_backup_url_does_not_override_existing_state(monkeypatch) -
             self.database_url = database_url
 
         def create_backup(self, payload) -> int:
+            assert "backup_url" not in payload
             return 1
 
     monkeypatch.setattr("app.telegram_bot.BackupStore", DummyStore)
@@ -101,6 +102,35 @@ async def test_pending_action_expires() -> None:
 
     assert state.snapshot()["urls"] == []
     assert update.effective_message.replies == []
+    assert controller.pending == {}
+
+
+@pytest.mark.asyncio
+async def test_set_pending_clears_expired_pending_actions() -> None:
+    state = AppState()
+    controller = BotController(state, "123", pending_ttl_seconds=0)
+
+    controller._set_pending(1, {"action": "sub-url"})
+    await asyncio.sleep(0)
+    controller._set_pending(2, {"action": "sub-url"})
+
+    assert set(controller.pending) == {2}
+
+
+@pytest.mark.asyncio
+async def test_restore_without_database_url_returns_clear_message(monkeypatch) -> None:
+    state = AppState()
+    controller = BotController(state, "123")
+    update = DummyUpdate()
+
+    def fail_if_used(database_url: str):
+        raise AssertionError("BackupStore should not be created without a database URL")
+
+    monkeypatch.setattr("app.telegram_bot.BackupStore", fail_if_used)
+
+    await controller._handle_restore(update, "1", [{"id": "5", "created_at": "2026-05-12T00:00:00+00:00"}])
+
+    assert update.effective_message.replies == ["沒有設定資料庫。"]
 
 
 @pytest.mark.asyncio

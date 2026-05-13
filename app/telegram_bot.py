@@ -72,11 +72,23 @@ class BotController:
         self.pending_ttl_seconds = pending_ttl_seconds
         self.pending: dict[int, PendingAction] = {}
 
+    def _clear_expired_pending(self) -> None:
+        now = monotonic()
+        expired_chat_ids = [
+            chat_id
+            for chat_id, action in self.pending.items()
+            if isinstance(action.get("expires_at"), float) and now > action["expires_at"]
+        ]
+        for chat_id in expired_chat_ids:
+            self.pending.pop(chat_id, None)
+
     def _set_pending(self, chat_id: int, action: PendingAction) -> None:
+        self._clear_expired_pending()
         action["expires_at"] = monotonic() + self.pending_ttl_seconds
         self.pending[chat_id] = action
 
     def _pop_pending(self, chat_id: int) -> PendingAction | None:
+        self._clear_expired_pending()
         action = self.pending.pop(chat_id, None)
         if not action:
             return None
@@ -186,7 +198,7 @@ class BotController:
 
     async def _create_backup(self, update: Update, database_url: str) -> None:
         try:
-            backup_id = await asyncio.to_thread(lambda: BackupStore(database_url).create_backup(self.state.snapshot()))
+            backup_id = await asyncio.to_thread(lambda: BackupStore(database_url).create_backup(self.state.backup_snapshot()))
             await _reply(update, f"備份完成，備份編號：{backup_id}")
         except Exception as exc:  # noqa: BLE001
             await _reply(update, f"備份失敗：{exc}")
@@ -215,7 +227,10 @@ class BotController:
             return
         backup_id = int(backups[int(text) - 1]["id"])
         database_url = database_url or self.state.get_backup_url()
-        payload = await asyncio.to_thread(lambda: BackupStore(database_url).get_backup(backup_id)) if database_url else None
+        if not database_url:
+            await _reply(update, "沒有設定資料庫。")
+            return
+        payload = await asyncio.to_thread(lambda: BackupStore(database_url).get_backup(backup_id))
         if not payload:
             await _reply(update, "找不到這個備份。")
             return
