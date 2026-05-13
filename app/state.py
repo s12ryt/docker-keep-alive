@@ -143,10 +143,15 @@ class AppState:
         data.pop("backup_url", None)
         return data
 
+    def backup_snapshot(self) -> dict[str, Any]:
+        return self.public_snapshot()
+
     def restore(self, data: dict[str, Any]) -> None:
         with self._lock:
             self.notify_enabled = bool(data.get("notify_enabled", False))
-            self.backup_url = data.get("backup_url") or self.backup_url
+            if self.backup_url is None:
+                backup_url = data.get("backup_url")
+                self.backup_url = backup_url if isinstance(backup_url, str) else None
             self.urls = [TargetUrl.from_dict(item) for item in data.get("urls", [])]
 
     def state_text(self) -> str:

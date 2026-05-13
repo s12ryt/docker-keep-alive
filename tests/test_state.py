@@ -55,6 +55,30 @@ def test_public_snapshot_omits_backup_url() -> None:
     assert "backup_url" not in snapshot
 
 
+def test_backup_snapshot_omits_backup_url() -> None:
+    state = AppState(backup_url="postgres://user:secret@example.com/db")
+    snapshot = state.backup_snapshot()
+
+    assert "backup_url" not in snapshot
+    assert "secret" not in str(snapshot)
+
+
+def test_restore_keeps_existing_backup_url() -> None:
+    state = AppState(backup_url="postgres://current:secret@example.com/db")
+
+    state.restore({"backup_url": "postgres://old:leaked@example.com/db", "urls": [], "notify_enabled": False})
+
+    assert state.get_backup_url() == "postgres://current:secret@example.com/db"
+
+
+def test_restore_can_read_legacy_backup_url_when_current_is_missing() -> None:
+    state = AppState()
+
+    state.restore({"backup_url": "postgres://legacy:secret@example.com/db", "urls": [], "notify_enabled": False})
+
+    assert state.get_backup_url() == "postgres://legacy:secret@example.com/db"
+
+
 def test_state_text_masks_urls() -> None:
     state = AppState()
     secret_url = "https://secret.example.com/private/path?token=super-secret-token"
